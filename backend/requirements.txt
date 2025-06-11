@@ -1,0 +1,9 @@
+fastapi==0.115.12
+uvicorn[standard]==0.34.3
+python-multipart==0.0.20
+PyMuPDF==1.23.8
+sentence-transformers==4.1.0
+chromadb==1.0.12
+python-dotenv==1.0.0
+pydantic==2.5.0
+sqlalchemy==2.0.23

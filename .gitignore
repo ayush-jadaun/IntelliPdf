@@ -1,0 +1,428 @@
+# IntelliPDF - Comprehensive .gitignore
+
+# ========================
+# ENVIRONMENT & SECRETS
+# ========================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+.envrc
+
+# API Keys and secrets
+config/secrets/
+secrets/
+*.key
+*.pem
+*.p12
+*.pfx
+
+# ========================
+# PYTHON BACKEND
+# ========================
+# Virtual environments
+backend/venv/
+backend/env/
+backend/.venv/
+backend/.env/
+*.venv
+*.env
+
+# Python compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# ========================
+# NODE.JS FRONTEND
+# ========================
+# Dependencies
+frontend/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+
+# NYC test coverage
+.nyc_output
+
+# Grunt intermediate storage
+.grunt
+
+# Bower dependency directory
+bower_components
+
+# Node-waf configuration
+.lock-wscript
+
+# Compiled binary addons
+build/Release
+
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# Snowpack dependency directory
+web_modules/
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# parcel-bundler cache
+.cache
+.parcel-cache
+
+# Next.js build output
+frontend/.next/
+frontend/out/
+
+# Nuxt.js build / generate output
+.nuxt
+dist
+
+# Gatsby files
+.cache/
+public
+
+# Storybook build outputs
+.out
+.storybook-out
+
+# Temporary folders
+tmp/
+temp/
+
+# ========================
+# DATABASE & STORAGE
+# ========================
+# SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+data/sqlite/
+
+# PostgreSQL
+*.sql
+*.dump
+
+# Vector databases
+data/vector_db/
+data/chroma/
+*.index
+*.faiss
+
+# Uploaded files
+data/uploads/
+data/processed/
+uploads/
+processed/
+
+# MinIO/S3 local storage
+data/minio/
+
+# Redis dumps
+dump.rdb
+
+# ========================
+# AI/ML MODELS & DATA
+# ========================
+# Hugging Face models cache
+.cache/
+transformers_cache/
+sentence_transformers/
+
+# Model files (too large for git)
+*.bin
+*.safetensors
+*.h5
+*.pkl
+*.joblib
+models/
+checkpoints/
+
+# Dataset files
+*.csv
+*.json
+*.jsonl
+*.parquet
+*.arrow
+datasets/
+
+# Embeddings and vectors
+*.npy
+*.npz
+embeddings/
+vectors/
+
+# ========================
+# DOCKER & CONTAINERS
+# ========================
+# Docker volumes
+docker-volumes/
+.docker/
+
+# Docker compose override
+docker-compose.override.yml
+docker-compose.local.yml
+
+# ========================
+# IDE & EDITORS
+# ========================
+# VSCode
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# JetBrains IDEs
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# ========================
+# OPERATING SYSTEM
+# ========================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ========================
+# LOGS & MONITORING
+# ========================
+# Application logs
+logs/
+*.log
+log/
+*.log.*
+
+# PM2 logs
+.pm2/
+
+# ========================
+# BACKUP & TEMPORARY
+# ========================
+# Backup files
+*.bak
+*.backup
+*.old
+*.orig
+*.save
+*.swp
+*.tmp
+
+# Archive files
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+
+# ========================
+# TESTING & CI/CD
+# ========================
+# Test results
+test-results/
+test_results/
+.coverage
+coverage/
+
+# Allure reports
+allure-results/
+allure-report/
+
+# ========================
+# DOCUMENTATION BUILD
+# ========================
+# Sphinx documentation
+docs/_build/
+
+# MkDocs
+site/
+
+# ========================
+# DEPLOYMENT & CLOUD
+# ========================
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# Kubernetes secrets
+*secret*.yaml
+*secret*.yml
+
+# Cloud provider configs
+.aws/
+.gcp/
+.azure/
+
+# ========================
+# CUSTOM PROJECT FILES
+# ========================
+# Sample/demo data (uncomment if you want to exclude)
+# scripts/sample_data/pdfs/
+# data/demo/
+
+# Large research papers (if you're testing with big files)
+# *.pdf
+
+# Configuration files with sensitive data
+config/local/
+local_config/
+
+# Performance profiling
+*.prof
+*.profile
+
+# Benchmarking results
+benchmarks/results/
+
+# ========================
+# KEEP THESE FILES
+# ========================
+# Important: Don't ignore these
+!.gitkeep
+!README.md
+!requirements.txt
+!package.json
+!docker-compose.yml
+!Dockerfile
+!.env.example
