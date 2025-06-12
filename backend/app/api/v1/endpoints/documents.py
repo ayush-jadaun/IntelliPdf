@@ -20,7 +20,6 @@ async def process_document(file: UploadFile = File(...)):
         pipeline = DocumentProcessingPipeline()
         result = pipeline.process(tmp_path)
 
-        # Return all fields, including analytics and semantic chunks with embeddings
         return ProcessedDocumentResponse(
             file_path=result["file_path"],
             metadata=result["metadata"],
@@ -31,6 +30,7 @@ async def process_document(file: UploadFile = File(...)):
             structure=result["structure"],
             analytics=result["analytics"],
             semantic_chunks=result["semantic_chunks"],
+            knowledge_graph=result["knowledge_graph"],  # <-- Add this field
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")

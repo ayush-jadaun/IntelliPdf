@@ -1,6 +1,6 @@
 """
 Document Processor for IntelliPDF
-Integrated pipeline for PDF processing, text analytics, and Gemini embeddings.
+Integrated pipeline for PDF processing, text analytics, Gemini embeddings, and knowledge graph construction.
 """
 
 import sys
@@ -22,13 +22,14 @@ from app.core.utils.text_processing import (
     extract_keywords_tfidf,
 )
 from app.core.ai.embeddings import embed_chunks_with_gemini
+from app.core.ai.knowledge_graph import build_knowledge_graph  # <--- NEW IMPORT
 
 logger = logging.getLogger(__name__)
 
 class DocumentProcessingPipeline:
     """
     Orchestrates the document processing pipeline using PDFProcessor,
-    SemanticTextChunker, text analytics, and Gemini embeddings.
+    SemanticTextChunker, text analytics, Gemini embeddings, and KG.
     """
 
     def __init__(
@@ -49,7 +50,7 @@ class DocumentProcessingPipeline:
         Args:
             file_path: Path to the PDF file
         Returns:
-            Dict with processed document data, analytics, and semantic embeddings
+            Dict with processed document data, analytics, semantic embeddings, and knowledge graph.
         """
         logger.info(f"Starting pipeline for: {file_path}")
 
@@ -71,7 +72,16 @@ class DocumentProcessingPipeline:
             # 4. Embeddings (chunk level)
             semantic_chunks_with_embeddings = embed_chunks_with_gemini(semantic_chunks)
 
-            # 5. Prepare result for API or downstream processing
+            # 5. Knowledge Graph Construction
+            doc_id = processed_doc.metadata.get("title") or processed_doc.file_path
+            knowledge_graph = build_knowledge_graph(
+                entities=entities,
+                keywords=keywords,
+                doc_metadata=processed_doc.metadata,
+                doc_id=doc_id,
+            )
+
+            # 6. Prepare result for API or downstream processing
             result = {
                 "file_path": processed_doc.file_path,
                 "metadata": self._serialize_metadata(processed_doc.metadata),
@@ -94,7 +104,8 @@ class DocumentProcessingPipeline:
                     "entities": entities,
                     "keywords": keywords,
                 },
-                "semantic_chunks": semantic_chunks_with_embeddings,  # Each has text, metadata, and embedding
+                "semantic_chunks": semantic_chunks_with_embeddings,
+                "knowledge_graph": knowledge_graph,  # <--- NEW FIELD
             }
 
             logger.info(
@@ -159,6 +170,11 @@ if __name__ == "__main__":
         for i, chunk in enumerate(result["semantic_chunks"][:3]):
             print(f"Chunk {i+1}: {chunk['text'][:100]}...")
             print(f"Embedding (first 5 values): {chunk['embedding'][:5]}")
+
+        # Print knowledge graph sample
+        print("\nKnowledge Graph Nodes/Edges Sample:")
+        print("Nodes:", result["knowledge_graph"]["nodes"][:2])
+        print("Edges:", result["knowledge_graph"]["edges"][:2])
 
     except Exception as e:
         print(f"Error processing document: {str(e)}")
