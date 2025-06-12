@@ -16,7 +16,7 @@ class TextChunk(BaseModel):
 
 class TableData(BaseModel):
     page_number: int
-    data: List[List[str]]  # or more specific as needed
+    data: List[List[str]]
 
 class ImageData(BaseModel):
     page_number: int
@@ -30,6 +30,13 @@ class DocumentStructure(BaseModel):
     headers: List[Dict[str, Any]]
     pages: Dict[int, List[Dict[str, Any]]]
 
+class TextAnalytics(BaseModel):
+    word_count: int
+    sentence_count: int
+    keywords: List[str]
+    summary: Optional[str]
+    entities: List[str]
+
 class ProcessedDocumentResponse(BaseModel):
     file_path: str
     metadata: DocumentMetadata
@@ -38,3 +45,4 @@ class ProcessedDocumentResponse(BaseModel):
     tables: List[TableData]
     images: List[ImageData]
     structure: DocumentStructure
+    analytics: TextAnalytics
