@@ -1,13 +1,6 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from app.core.ai.document_processor import DocumentProcessingPipeline
-from app.schemas.document import ProcessedDocumentResponse, TextAnalytics
-from app.core.utils.text_processing import (
-    preprocess_text_pipeline,
-    extract_text_features,
-    summarize_text_simple,
-    extract_named_entities,
-    extract_keywords
-)
+from app.schemas.document import ProcessedDocumentResponse
 import os
 import tempfile
 
@@ -27,32 +20,17 @@ async def process_document(file: UploadFile = File(...)):
         pipeline = DocumentProcessingPipeline()
         result = pipeline.process(tmp_path)
 
-        # --- Integrate Text Processing ---
-        full_text = result["full_text"]
-        processed_text, meta = preprocess_text_pipeline(full_text)
-        features = extract_text_features(processed_text)
-        summary = summarize_text_simple(processed_text)
-        entities = extract_named_entities(processed_text)
-        keywords = extract_keywords(processed_text)
-
-        analytics = TextAnalytics(
-            word_count=features["word_count"],
-            sentence_count=features["sentence_count"],
-            keywords=keywords,
-            summary=summary,
-            entities=entities,
-        )
-
-        # Return all fields + analytics
+        # Return all fields, including analytics and semantic chunks with embeddings
         return ProcessedDocumentResponse(
             file_path=result["file_path"],
             metadata=result["metadata"],
-            full_text=processed_text,
+            full_text=result["full_text"],
             text_chunks=result["text_chunks"],
             tables=result["tables"],
             images=result["images"],
             structure=result["structure"],
-            analytics=analytics,
+            analytics=result["analytics"],
+            semantic_chunks=result["semantic_chunks"],
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
