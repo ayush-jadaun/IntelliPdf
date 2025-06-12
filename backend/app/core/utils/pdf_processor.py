@@ -45,7 +45,7 @@ class TextChunk:
 class ProcessedDocument:
     """Complete processed document structure"""
     file_path: str
-    metadata: DocumentMetadata
+    doc_metadata: DocumentMetadata  # <--- CHANGED FROM 'metadata'
     text_chunks: List[TextChunk]
     full_text: str
     tables: List[pd.DataFrame]
@@ -83,7 +83,7 @@ class PDFProcessor:
             doc = fitz.open(file_path)
             
             # Extract metadata
-            metadata = self._extract_metadata(doc, file_path)
+            doc_metadata = self._extract_metadata(doc, file_path)  # <--- CHANGED
             
             # Extract text chunks with structure
             text_chunks = self._extract_text_chunks(doc)
@@ -104,7 +104,7 @@ class PDFProcessor:
             
             return ProcessedDocument(
                 file_path=file_path,
-                metadata=metadata,
+                doc_metadata=doc_metadata,  # <--- CHANGED
                 text_chunks=text_chunks,
                 full_text=full_text,
                 tables=tables,
@@ -398,8 +398,8 @@ def main():
     # Example usage
     try:
         result = processor.process_pdf("ok.pdf")
-        print(f"Processed document: {result.metadata.title}")
-        print(f"Pages: {result.metadata.page_count}")
+        print(f"Processed document: {result.doc_metadata.title}")
+        print(f"Pages: {result.doc_metadata.page_count}")
         print(f"Text chunks: {len(result.text_chunks)}")
         print(f"Tables found: {len(result.tables)}")
         print(f"Images found: {len(result.images)}")

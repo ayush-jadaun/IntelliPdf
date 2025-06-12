@@ -19,7 +19,7 @@ class KnowledgeGraph(BaseModel):
 
 class ProcessedDocumentResponse(BaseModel):
     file_path: str
-    metadata: Dict[str, Any]
+    doc_metadata: Dict[str, Any]        # <--- Renamed from metadata for consistency
     full_text: str
     text_chunks: List[Dict[str, Any]]
     tables: List[Any]
@@ -27,4 +27,4 @@ class ProcessedDocumentResponse(BaseModel):
     structure: Dict[str, Any]
     analytics: Dict[str, Any]
     semantic_chunks: List[Dict[str, Any]]
-    knowledge_graph: KnowledgeGraph      # <--- Add this
+    knowledge_graph: KnowledgeGraph

@@ -1,7 +1,6 @@
-# Base image with Python
+# syntax=docker/dockerfile:1
 FROM python:3.11-slim
 
-# Set working directory
 WORKDIR /app
 
 # Install system dependencies
@@ -9,21 +8,31 @@ RUN apt-get update && apt-get install -y \
     gcc \
     libpq-dev \
     curl \
-    && rm -rf /var/lib/apt/lists/*
+    libgl1 \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
-# Install Python dependencies
+# Copy requirements first
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy app code
+# Install Python dependencies with cache mount
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip \
+    && pip install -r requirements.txt
+
+# Download spaCy model with cache
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m spacy download en_core_web_sm
+
+# Copy application code
 COPY ./app ./app
-
-# Copy Alembic migrations if needed
 COPY ./alembic ./alembic
-COPY ./alembic.ini .
+COPY alembic.ini .
 
-# Expose port for FastAPI
 EXPOSE 8000
 
-# Run FastAPI app with Uvicorn
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

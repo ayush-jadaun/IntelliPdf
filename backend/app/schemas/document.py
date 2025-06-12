@@ -39,7 +39,7 @@ class TextAnalytics(BaseModel):
 
 class ProcessedDocumentResponse(BaseModel):
     file_path: str
-    metadata: DocumentMetadata
+    doc_metadata: DocumentMetadata  # <-- Renamed from 'metadata'
     full_text: str
     text_chunks: List[TextChunk]
     tables: List[TableData]

@@ -10,8 +10,8 @@ def processor():
 
 def test_metadata_extraction(processor):
     doc = processor.process_pdf(SAMPLE_PDF)
-    assert doc.metadata.page_count > 0
-    assert isinstance(doc.metadata.title, str)
+    assert doc.doc_metadata.page_count > 0  # Changed from doc.metadata
+    assert isinstance(doc.doc_metadata.title, str)
 
 def test_text_extraction(processor):
     doc = processor.process_pdf(SAMPLE_PDF)

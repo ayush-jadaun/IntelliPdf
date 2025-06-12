@@ -1,6 +1,9 @@
 """
 Document Processor for IntelliPDF
-Integrated pipeline for PDF processing, text analytics, Gemini embeddings, and knowledge graph construction.
+Integrated pipeline for PDF processing, text analytics, Gemini embeddings, knowledge graph construction,
+and persistence of embeddings using pgvector vector store.
+
+Author: IntelliPDF Team
 """
 
 import sys
@@ -21,15 +24,21 @@ from app.core.utils.text_processing import (
     extract_named_entities,
     extract_keywords_tfidf,
 )
-from app.core.ai.embeddings import embed_chunks_with_gemini
-from app.core.ai.knowledge_graph import build_knowledge_graph  # <--- NEW IMPORT
+from app.core.ai.embeddings import embed_texts_with_gemini
+from app.core.ai.knowledge_graph import build_knowledge_graph
+from app.core.database.session import SessionLocal
+from app.core.database.vector_store import (
+    add_document_embedding,
+    add_chunk_embedding,
+    bulk_add_chunk_embeddings,
+)
 
 logger = logging.getLogger(__name__)
 
 class DocumentProcessingPipeline:
     """
     Orchestrates the document processing pipeline using PDFProcessor,
-    SemanticTextChunker, text analytics, Gemini embeddings, and KG.
+    SemanticTextChunker, text analytics, Gemini embeddings, KG, and vector store.
     """
 
     def __init__(
@@ -53,6 +62,7 @@ class DocumentProcessingPipeline:
             Dict with processed document data, analytics, semantic embeddings, and knowledge graph.
         """
         logger.info(f"Starting pipeline for: {file_path}")
+        db = SessionLocal()
 
         try:
             # 1. PDF Extraction
@@ -70,10 +80,45 @@ class DocumentProcessingPipeline:
             keywords = extract_keywords_tfidf([processed_text])
 
             # 4. Embeddings (chunk level)
-            semantic_chunks_with_embeddings = embed_chunks_with_gemini(semantic_chunks)
+            semantic_chunks_with_embeddings = embed_texts_with_gemini(semantic_chunks)
+
+            # 4b. Persist document and chunk embeddings to the database
+            # Store document-level embedding if desired (e.g., average of chunk embeddings, or dedicated embedding)
+            # Here we use the average of chunk embeddings as a simple example
+            if semantic_chunks_with_embeddings and "embedding" in semantic_chunks_with_embeddings[0]:
+                avg_embedding = [
+                    float(sum(x) / len(semantic_chunks_with_embeddings))
+                    for x in zip(*(ch["embedding"] for ch in semantic_chunks_with_embeddings))
+                ]
+            else:
+                avg_embedding = None
+
+            # Add document to DB and get its ID
+            doc_metadata_dict = self._serialize_metadata(processed_doc.metadata)
+            doc_id = add_document_embedding(
+                db,
+                title=doc_metadata_dict.get("title") or os.path.basename(file_path),
+                embedding=avg_embedding,
+                file_path=file_path,
+                metadata=doc_metadata_dict,
+            )
+
+            # Prepare chunks for bulk insert
+            chunk_db_objs = []
+            for chunk, chunk_embed in zip(semantic_chunks, semantic_chunks_with_embeddings):
+                chunk_db_objs.append({
+                    "document_id": doc_id,
+                    "text": chunk["text"],
+                    "embedding": chunk_embed["embedding"],
+                    "page_number": chunk["metadata"][0].get("page") if chunk.get("metadata") else None,
+                    "chunk_type": chunk["metadata"][0].get("type") if chunk.get("metadata") else None,
+                    "metadata": chunk["metadata"] if chunk.get("metadata") else {},
+                })
+            # Bulk insert all chunk embeddings
+            if chunk_db_objs:
+                bulk_add_chunk_embeddings(db, chunk_db_objs)
 
             # 5. Knowledge Graph Construction
-            doc_id = processed_doc.metadata.get("title") or processed_doc.file_path
             knowledge_graph = build_knowledge_graph(
                 entities=entities,
                 keywords=keywords,
@@ -84,7 +129,7 @@ class DocumentProcessingPipeline:
             # 6. Prepare result for API or downstream processing
             result = {
                 "file_path": processed_doc.file_path,
-                "metadata": self._serialize_metadata(processed_doc.metadata),
+                "metadata": doc_metadata_dict,
                 "pages": processed_doc.metadata.page_count,
                 "text_chunks": [
                     self._serialize_text_chunk(chunk)
@@ -105,7 +150,8 @@ class DocumentProcessingPipeline:
                     "keywords": keywords,
                 },
                 "semantic_chunks": semantic_chunks_with_embeddings,
-                "knowledge_graph": knowledge_graph,  # <--- NEW FIELD
+                "knowledge_graph": knowledge_graph,
+                "document_id": doc_id,  # Useful for downstream queries
             }
 
             logger.info(
@@ -116,6 +162,8 @@ class DocumentProcessingPipeline:
         except Exception as e:
             logger.error(f"Error in document processing pipeline: {str(e)}")
             raise
+        finally:
+            db.close()
 
     def _serialize_metadata(self, metadata) -> Dict[str, Any]:
         """Convert metadata dataclass to dict safely."""
@@ -134,7 +182,6 @@ class DocumentProcessingPipeline:
             "bbox": chunk.bbox,
         }
         return chunk_dict
-
 
 # Example usage for testing
 if __name__ == "__main__":

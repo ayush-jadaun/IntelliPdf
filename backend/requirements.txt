@@ -41,3 +41,11 @@ pyyaml==6.0.2
 langdetect
 google-generativeai
 aiofiles
+boto3
+tqdm
+python-dotenv
+wheel
+setuptools
+build
+pgvector
+neo4j
