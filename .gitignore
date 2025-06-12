@@ -29,6 +29,7 @@ backend/.venv/
 backend/.env/
 *.venv
 *.env
+venv
 
 # Python compiled files
 __pycache__/
