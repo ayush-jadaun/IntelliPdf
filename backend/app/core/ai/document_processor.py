@@ -1,5 +1,5 @@
 """
-Document Processor for IntelliPDF
+Document Processor for IntelliPDF - FIXED VERSION
 Integrated pipeline for PDF processing, text analytics, Gemini embeddings, knowledge graph construction,
 and persistence of embeddings using pgvector vector store.
 
@@ -9,8 +9,9 @@ Author: IntelliPDF Team
 import sys
 import os
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 import logging
+import traceback
 
 # Add the project root to Python path for imports
 project_root = Path(__file__).parent.parent.parent
@@ -24,7 +25,7 @@ from app.core.utils.text_processing import (
     extract_named_entities,
     extract_keywords_tfidf,
 )
-from app.core.ai.embeddings import embed_texts_with_gemini
+from app.core.ai.embeddings import SentenceTransformerEmbedder
 from app.core.ai.knowledge_graph import build_knowledge_graph
 from app.core.database.session import SessionLocal
 from app.core.database.vector_store import (
@@ -62,96 +63,244 @@ class DocumentProcessingPipeline:
             Dict with processed document data, analytics, semantic embeddings, and knowledge graph.
         """
         logger.info(f"Starting pipeline for: {file_path}")
-        db = SessionLocal()
+        db = None
 
         try:
             # 1. PDF Extraction
+            logger.info("Step 1: PDF extraction")
             processed_doc = self.processor.process_pdf(file_path)
+            logger.info(f"Extracted {len(processed_doc.text_chunks)} text chunks")
 
             # 2. Semantic Chunking
+            logger.info("Step 2: Semantic chunking")
             semantic_chunks = self.chunker.chunk_by_semantics(processed_doc.text_chunks)
+            logger.info(f"Created {len(semantic_chunks)} semantic chunks")
 
             # 3. Text Analytics (full document level)
+            logger.info("Step 3: Text analytics")
             full_text = processed_doc.full_text
-            processed_text, preprocess_meta = preprocess_text_pipeline(full_text)
-            analytics = extract_text_features(processed_text)
-            summary = summarize_text_simple(processed_text)
-            entities = extract_named_entities(processed_text)
-            keywords = extract_keywords_tfidf([processed_text])
+
+            # Safe text processing with fallbacks
+            try:
+                processed_text, preprocess_meta = preprocess_text_pipeline(full_text)
+                analytics = extract_text_features(processed_text)
+                summary = summarize_text_simple(processed_text)
+                entities = extract_named_entities(processed_text)
+                keywords = extract_keywords_tfidf([processed_text])
+            except Exception as e:
+                logger.warning(f"Text analytics failed: {e}")
+                processed_text = full_text
+                preprocess_meta = {}
+                analytics = {}
+                summary = "Summary generation failed"
+                entities = []
+                keywords = []
 
             # 4. Embeddings (chunk level)
-            semantic_chunks_with_embeddings = embed_texts_with_gemini(semantic_chunks)
+            logger.info("Step 4: Creating embeddings")
+            try:
+                embedder = SentenceTransformerEmbedder()
+                for chunk in semantic_chunks:
+                    chunk["embedding"] = embedder.embed_texts([chunk["text"]])[0]
+                logger.info(f"Generated embeddings for {len(semantic_chunks)} chunks")
+                semantic_chunks_with_embeddings = semantic_chunks
+            except Exception as e:
+                logger.warning(f"Embedding generation failed: {e}")
+                semantic_chunks_with_embeddings = []
+                for chunk in semantic_chunks:
+                    chunk_copy = chunk.copy()
+                    chunk_copy["embedding"] = None
+                    semantic_chunks_with_embeddings.append(chunk_copy)
 
-            # 4b. Persist document and chunk embeddings to the database
-            # Store document-level embedding if desired (e.g., average of chunk embeddings, or dedicated embedding)
-            # Here we use the average of chunk embeddings as a simple example
-            if semantic_chunks_with_embeddings and "embedding" in semantic_chunks_with_embeddings[0]:
-                avg_embedding = [
-                    float(sum(x) / len(semantic_chunks_with_embeddings))
-                    for x in zip(*(ch["embedding"] for ch in semantic_chunks_with_embeddings))
-                ]
-            else:
-                avg_embedding = None
+            # 5. Database operations (with safe handling)
+            logger.info("Step 5: Database operations")
+            doc_id = None
+            avg_embedding = None
 
-            # Add document to DB and get its ID
-            doc_metadata_dict = self._serialize_metadata(processed_doc.metadata)
-            doc_id = add_document_embedding(
-                db,
-                title=doc_metadata_dict.get("title") or os.path.basename(file_path),
-                embedding=avg_embedding,
-                file_path=file_path,
-                metadata=doc_metadata_dict,
-            )
+            try:
+                db = SessionLocal()
 
-            # Prepare chunks for bulk insert
-            chunk_db_objs = []
-            for chunk, chunk_embed in zip(semantic_chunks, semantic_chunks_with_embeddings):
-                chunk_db_objs.append({
-                    "document_id": doc_id,
-                    "text": chunk["text"],
-                    "embedding": chunk_embed["embedding"],
-                    "page_number": chunk["metadata"][0].get("page") if chunk.get("metadata") else None,
-                    "chunk_type": chunk["metadata"][0].get("type") if chunk.get("metadata") else None,
-                    "metadata": chunk["metadata"] if chunk.get("metadata") else {},
-                })
-            # Bulk insert all chunk embeddings
-            if chunk_db_objs:
-                bulk_add_chunk_embeddings(db, chunk_db_objs)
+                # Calculate average embedding if embeddings exist
+                valid_embeddings = [ch.get("embedding") for ch in semantic_chunks_with_embeddings
+                                  if ch.get("embedding") is not None]
 
-            # 5. Knowledge Graph Construction
-            knowledge_graph = build_knowledge_graph(
-                entities=entities,
-                keywords=keywords,
-                doc_metadata=processed_doc.metadata,
-                doc_id=doc_id,
-            )
+                if valid_embeddings:
+                    avg_embedding = [
+                        float(sum(x) / len(valid_embeddings))
+                        for x in zip(*valid_embeddings)
+                    ]
 
-            # 6. Prepare result for API or downstream processing
+                # Add document to DB and get its ID
+                doc_metadata_dict = self._serialize_metadata(processed_doc.doc_metadata)
+                doc_id = add_document_embedding(
+                    db,
+                    title=doc_metadata_dict.get("title") or os.path.basename(file_path),
+                    embedding=avg_embedding,
+                    file_path=file_path,
+                    metadata=doc_metadata_dict,
+                )
+                logger.info(f"Added document to DB with ID: {doc_id}")
+
+                # Prepare chunks for bulk insert
+                chunk_db_objs = []
+                for i, chunk in enumerate(semantic_chunks_with_embeddings):
+                    try:
+                        chunk_metadata = chunk.get("metadata", {})
+                        chunk_db_objs.append({
+                            "document_id": doc_id,
+                            "text": chunk["text"],
+                            "embedding": chunk.get("embedding"),
+                            "page_number": chunk_metadata.get("original_page", 1),
+                            "chunk_type": chunk_metadata.get("chunk_type", "semantic"),
+                            "metadata": chunk_metadata,
+                        })
+                    except Exception as e:
+                        logger.warning(f"Error preparing chunk {i}: {e}")
+                        continue
+
+                # Bulk insert all chunk embeddings
+                if chunk_db_objs:
+                    bulk_add_chunk_embeddings(db, chunk_db_objs)
+                    logger.info(f"Added {len(chunk_db_objs)} chunks to DB")
+
+            except Exception as e:
+                logger.error(f"Database operations failed: {e}")
+                logger.error(traceback.format_exc())
+                # Continue without database operations
+
+            finally:
+                if db:
+                    try:
+                        db.close()
+                    except:
+                        pass
+
+            # 6. Knowledge Graph Construction (with safe handling)
+            logger.info("Step 6: Knowledge graph construction")
+            try:
+                knowledge_graph = build_knowledge_graph(
+                    entities=entities,
+                    keywords=keywords,
+                    doc_metadata=processed_doc.doc_metadata,
+                    doc_id=doc_id,
+                )
+            except Exception as e:
+                logger.warning(f"Knowledge graph construction failed: {e}")
+                knowledge_graph = {"nodes": [], "edges": [], "error": str(e)}
+
+            # 7. Prepare result for API or downstream processing
+            logger.info("Step 7: Preparing result")
+
+            # Safe table serialization
+            serialized_tables = []
+            for table in processed_doc.tables:
+                try:
+                    if hasattr(table, "page_number") and hasattr(table, "data"):
+                        # matches TableData
+                        serialized_tables.append({
+                            "page_number": table.page_number,
+                            "data": table.data
+                        })
+                    elif hasattr(table, "to_dict"):
+                        serialized_tables.append(table.to_dict())
+                    elif hasattr(table, "to_json"):
+                        serialized_tables.append(table.to_json())
+                    else:
+                        serialized_tables.append(str(table))
+                except Exception as e:
+                    logger.warning(f"Error serializing table: {e}")
+                    serialized_tables.append({"error": "Serialization failed"})
+
+            # Safe image serialization
+            serialized_images = []
+            for img in processed_doc.images or []:
+                try:
+                    if hasattr(img, "page_number") and hasattr(img, "ext") and hasattr(img, "width") and hasattr(img, "height"):
+                        serialized_images.append({
+                            "page_number": img.page_number,
+                            "ext": img.ext,
+                            "width": img.width,
+                            "height": img.height,
+                        })
+                    elif isinstance(img, dict):
+                        # already dict-like, check keys
+                        img_obj = {
+                            "page_number": img.get("page_number"),
+                            "ext": img.get("ext"),
+                            "width": img.get("width"),
+                            "height": img.get("height"),
+                        }
+                        serialized_images.append(img_obj)
+                    else:
+                        serialized_images.append(str(img))
+                except Exception as e:
+                    logger.warning(f"Error serializing image: {e}")
+                    serialized_images.append({"error": "Serialization failed"})
+
+            # Safe structure serialization
+            structure = {}
+            try:
+                s = processed_doc.structure
+                if s and all(hasattr(s, attr) for attr in ("total_chunks", "chunk_types", "headers", "pages")):
+                    structure = {
+                        "total_chunks": s.total_chunks,
+                        "chunk_types": s.chunk_types,
+                        "headers": s.headers,
+                        "pages": s.pages,
+                    }
+                elif isinstance(s, dict):
+                    # Already dict
+                    structure = s
+                else:
+                    structure = {}
+            except Exception as e:
+                logger.warning(f"Error serializing structure: {e}")
+                structure = {}
+
+            # Safe analytics serialization
+            analytics_obj = {}
+            try:
+                if isinstance(analytics, dict):
+                    analytics_obj = {
+                        "word_count": analytics.get("word_count", 0),
+                        "sentence_count": analytics.get("sentence_count", 0),
+                        "keywords": keywords if isinstance(keywords, list) else [],
+                        "summary": summary,
+                        "entities": entities if isinstance(entities, list) else [],
+                    }
+                else:
+                    analytics_obj = {
+                        "word_count": 0,
+                        "sentence_count": 0,
+                        "keywords": [],
+                        "summary": summary,
+                        "entities": [],
+                    }
+            except Exception as e:
+                logger.warning(f"Error serializing analytics: {e}")
+                analytics_obj = {
+                    "word_count": 0,
+                    "sentence_count": 0,
+                    "keywords": [],
+                    "summary": summary,
+                    "entities": [],
+                }
+
             result = {
-                "file_path": processed_doc.file_path,
-                "metadata": doc_metadata_dict,
-                "pages": processed_doc.metadata.page_count,
+                "file_path": file_path,
+                "doc_metadata": self._serialize_metadata(processed_doc.doc_metadata),
+                "full_text": processed_text,
                 "text_chunks": [
                     self._serialize_text_chunk(chunk)
                     for chunk in processed_doc.text_chunks
                 ],
-                "full_text": processed_text,
-                "tables": [
-                    table.to_dict() if hasattr(table, "to_dict") else table.to_json()
-                    for table in processed_doc.tables
-                ],
-                "images": processed_doc.images,
-                "structure": processed_doc.structure,
-                "analytics": {
-                    "preprocess_meta": preprocess_meta,
-                    "features": analytics,
-                    "summary": summary,
-                    "entities": entities,
-                    "keywords": keywords,
-                },
+                "tables": serialized_tables,
+                "images": serialized_images,
+                "structure": structure,
+                "analytics": analytics_obj,
                 "semantic_chunks": semantic_chunks_with_embeddings,
                 "knowledge_graph": knowledge_graph,
-                "document_id": doc_id,  # Useful for downstream queries
+                "document_id": doc_id,
             }
 
             logger.info(
@@ -161,30 +310,58 @@ class DocumentProcessingPipeline:
 
         except Exception as e:
             logger.error(f"Error in document processing pipeline: {str(e)}")
+            logger.error(traceback.format_exc())
             raise
         finally:
-            db.close()
+            if db:
+                try:
+                    db.close()
+                except:
+                    pass
 
     def _serialize_metadata(self, metadata) -> Dict[str, Any]:
         """Convert metadata dataclass to dict safely."""
-        if hasattr(metadata, "__dict__"):
-            return {k: v for k, v in metadata.__dict__.items()}
-        else:
-            return vars(metadata)
+        try:
+            if hasattr(metadata, "__dict__"):
+                return {k: v for k, v in metadata.__dict__.items()}
+            elif hasattr(metadata, "_asdict"):  # namedtuple
+                return metadata._asdict()
+            elif isinstance(metadata, dict):
+                return metadata
+            else:
+                return vars(metadata)
+        except Exception as e:
+            logger.warning(f"Error serializing metadata: {e}")
+            return {}
 
     def _serialize_text_chunk(self, chunk) -> Dict[str, Any]:
         """Convert text chunk dataclass to dict safely."""
-        chunk_dict = {
-            "text": chunk.text,
-            "page_number": chunk.page_number,
-            "chunk_type": chunk.chunk_type,
-            "font_info": chunk.font_info,
-            "bbox": chunk.bbox,
-        }
-        return chunk_dict
+        try:
+            chunk_dict = {
+                "text": getattr(chunk, "text", ""),
+                "page_number": getattr(chunk, "page_number", 1),
+                "chunk_type": getattr(chunk, "chunk_type", ""),
+                "font_info": getattr(chunk, "font_info", {}),
+                "bbox": getattr(chunk, "bbox", None),
+            }
+            # Convert tuple bbox to list if needed
+            if chunk_dict["bbox"] and isinstance(chunk_dict["bbox"], tuple):
+                chunk_dict["bbox"] = list(chunk_dict["bbox"])
+            return chunk_dict
+        except Exception as e:
+            logger.warning(f"Error serializing text chunk: {e}")
+            return {
+                "text": str(chunk),
+                "page_number": 1,
+                "chunk_type": "",
+                "font_info": {},
+                "bbox": None,
+            }
 
 # Example usage for testing
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+
     if len(sys.argv) < 2:
         print("Usage: python document_processor.py <pdf_path>")
         sys.exit(1)
@@ -198,30 +375,21 @@ if __name__ == "__main__":
         pipeline = DocumentProcessingPipeline()
         result = pipeline.process(pdf_path)
 
-        print(f"Document: {result['metadata'].get('title', 'Unknown')}")
-        print(f"Pages: {result['pages']}")
+        meta = result.get("doc_metadata", {})
+        print(f"Document: {meta.get('title', 'Unknown')}")
         print(f"Text Chunks: {len(result['text_chunks'])}")
         print(f"Tables: {len(result['tables'])}")
         print(f"Images: {len(result['images'])}")
         print(f"Semantic Chunks: {len(result['semantic_chunks'])}")
 
         # Print analytics
+        analytics = result.get("analytics", {})
         print("\nDocument Analytics:")
-        print(f"- Summary: {result['analytics']['summary']}")
-        print(f"- Entities: {result['analytics']['entities']}")
-        print(f"- Top Keywords: {result['analytics']['keywords']}")
-        print(f"- Stats: {result['analytics']['features']['stats']}")
-
-        # Print first few semantic chunks as sample
-        print("\nFirst 3 semantic chunks (with embeddings):")
-        for i, chunk in enumerate(result["semantic_chunks"][:3]):
-            print(f"Chunk {i+1}: {chunk['text'][:100]}...")
-            print(f"Embedding (first 5 values): {chunk['embedding'][:5]}")
-
-        # Print knowledge graph sample
-        print("\nKnowledge Graph Nodes/Edges Sample:")
-        print("Nodes:", result["knowledge_graph"]["nodes"][:2])
-        print("Edges:", result["knowledge_graph"]["edges"][:2])
+        print(f"- Summary: {analytics.get('summary', '')}")
+        print(f"- Entities: {analytics.get('entities', [])}")
+        print(f"- Top Keywords: {analytics.get('keywords', [])}")
+        print(f"- Word Count: {analytics.get('word_count', 0)}")
+        print(f"- Sentence Count: {analytics.get('sentence_count', 0)}")
 
     except Exception as e:
         print(f"Error processing document: {str(e)}")

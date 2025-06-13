@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Body, Query, Depends
 from app.schemas.search import SearchRequest, SearchResponse, SearchResultChunk
-from app.core.ai.embeddings import embed_texts_with_gemini
+from app.core.ai.embeddings import SentenceTransformerEmbedder
 from app.core.database.vector_store import query_similar_chunks  # <-- use vector store!
 from app.core.database.session import get_db
 from sqlalchemy.orm import Session
@@ -22,7 +22,7 @@ async def search_chunks(
 
     # 1. Embed the query
     try:
-        query_embedding = embed_texts_with_gemini(request.query)
+        query_embedding = SentenceTransformerEmbedder(request.query)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Embedding failed: {str(e)}")
 
