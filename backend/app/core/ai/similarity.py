@@ -57,7 +57,6 @@ def hybrid_similar_chunks(
     Hybrid ranking: alpha * embedding_sim + (1-alpha) * tfidf_sim
     `alpha` controls the mix: 1.0 = only embeddings, 0.0 = only tfidf.
     """
-    # Prepare text and embeddings
     texts = [chunk["text"] for chunk in chunk_list]
     tfidf_scores = tfidf_keyword_scores(query, texts)
     emb_scores = np.array([
