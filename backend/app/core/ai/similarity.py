@@ -15,21 +15,31 @@ import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 def cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
-    v1 = np.array(vec1)
-    v2 = np.array(vec2)
-    if np.linalg.norm(v1) == 0 or np.linalg.norm(v2) == 0:
+    """
+    Compute cosine similarity between two vectors.
+    Returns 0.0 if either vector is zero.
+    """
+    v1 = np.array(vec1, dtype=np.float32)
+    v2 = np.array(vec2, dtype=np.float32)
+    norm_v1 = np.linalg.norm(v1)
+    norm_v2 = np.linalg.norm(v2)
+    if norm_v1 == 0 or norm_v2 == 0:
         return 0.0
-    return float(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2)))
+    return float(np.dot(v1, v2) / (norm_v1 * norm_v2))
 
 def most_similar_chunks(
     query_embedding: List[float],
     chunk_list: List[Dict[str, Any]],
     top_k: int = 5
 ) -> List[Tuple[Dict[str, Any], float]]:
+    """
+    Return top_k most similar chunks to the query_embedding using cosine similarity.
+    """
     similarities = []
     for chunk in chunk_list:
-        if "embedding" in chunk:
-            score = cosine_similarity(query_embedding, chunk["embedding"])
+        emb = chunk.get("embedding")
+        if emb is not None and isinstance(emb, (list, np.ndarray)):
+            score = cosine_similarity(query_embedding, emb)
             similarities.append((chunk, score))
     similarities.sort(key=lambda x: x[1], reverse=True)
     return similarities[:top_k]
@@ -56,12 +66,13 @@ def hybrid_similar_chunks(
     """
     Hybrid ranking: alpha * embedding_sim + (1-alpha) * tfidf_sim
     `alpha` controls the mix: 1.0 = only embeddings, 0.0 = only tfidf.
+    Returns top_k most relevant chunks.
     """
-    texts = [chunk["text"] for chunk in chunk_list]
+    texts = [chunk.get("text", "") for chunk in chunk_list]
     tfidf_scores = tfidf_keyword_scores(query, texts)
     emb_scores = np.array([
-        cosine_similarity(query_embedding, chunk["embedding"])
-        if "embedding" in chunk else 0.0
+        cosine_similarity(query_embedding, chunk.get("embedding"))
+        if chunk.get("embedding") is not None else 0.0
         for chunk in chunk_list
     ])
     # Normalize scores to 0-1
@@ -93,8 +104,9 @@ def batch_query_embeddings(
     for query_emb in queries:
         sims = []
         for chunk in chunk_list:
-            if "embedding" in chunk:
-                score = cosine_similarity(query_emb, chunk["embedding"])
+            emb = chunk.get("embedding")
+            if emb is not None and isinstance(emb, (list, np.ndarray)):
+                score = cosine_similarity(query_emb, emb)
                 sims.append((chunk, score))
         sims.sort(key=lambda x: x[1], reverse=True)
         results.append(sims[:top_k])

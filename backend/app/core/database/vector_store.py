@@ -8,11 +8,11 @@ pgvector Vector Store for IntelliPDF
 
 Author: IntelliPDF Team
 """
-
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
-from sqlalchemy import select, func
+from sqlalchemy import select, func, cast, literal_column
 from app.core.database.models import Document, Chunk
+from pgvector.sqlalchemy import Vector
 
 # =======================
 # Document-level operations
@@ -73,11 +73,18 @@ def query_similar_documents(
     Query for the top_k most similar documents using cosine similarity.
     Returns: [{id, title, score}]
     """
+    # Convert embedding to pgvector literal and use literal_column to inline it in SQL
+    embedding_str = "[" + ",".join(str(x) for x in embedding) + "]"
+    # ---- FIX: Ensure correct vector dimension! ----
+    VECTOR_DIM = len(embedding)
     stmt = (
         select(
             Document.id,
             Document.title,
-            func.cosine_distance(Document.embedding, embedding).label("distance"),
+            func.cosine_distance(
+                Document.embedding,
+                cast(literal_column(f"'{embedding_str}'"), Vector(VECTOR_DIM))
+            ).label("distance"),
         )
         .order_by("distance")
         .limit(top_k)
@@ -173,6 +180,8 @@ def query_similar_chunks(
     Optionally filter by document_id.
     Returns: [{id, document_id, text, score, page_number, chunk_type}]
     """
+    embedding_str = "[" + ",".join(str(x) for x in embedding) + "]"
+    VECTOR_DIM = len(embedding)
     stmt = (
         select(
             Chunk.id,
@@ -180,7 +189,10 @@ def query_similar_chunks(
             Chunk.text,
             Chunk.page_number,
             Chunk.chunk_type,
-            func.cosine_distance(Chunk.embedding, embedding).label("distance"),
+            func.cosine_distance(
+                Chunk.embedding,
+                cast(literal_column(f"'{embedding_str}'"), Vector(VECTOR_DIM))
+            ).label("distance")
         )
     )
     if document_id:

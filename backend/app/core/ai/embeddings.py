@@ -31,6 +31,7 @@ class SentenceTransformerEmbedder(EmbeddingProvider):
         Initialize with a sentence transformer model.
         """
         try:
+            
             from sentence_transformers import SentenceTransformer
             self.model = SentenceTransformer(model_name)
             self.model_name = model_name

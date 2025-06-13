@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, ValidationError, validator
-from typing import List, Optional, Dict, Any, Union
+from typing import List, Optional, Dict, Any
 import pandas as pd
 import logging
 
@@ -30,26 +30,20 @@ class TableData(BaseModel):
     
     @validator('data', pre=True)
     def validate_table_data(cls, v):
-        """Handle malformed table data from PDF extraction"""
         if v is None:
             return []
-        
-        # Handle pandas DataFrame
-        if hasattr(v, 'to_dict'):  # It's likely a DataFrame
+        if hasattr(v, 'to_dict'):
             try:
-                # Convert DataFrame to list of lists
-                df_dict = v.to_dict('records')  # Convert to list of dicts
+                df_dict = v.to_dict('records')
                 rows = []
                 for record in df_dict:
                     row = [str(value) for value in record.values()]
-                    if any(cell.strip() for cell in row):  # Only add non-empty rows
+                    if any(cell.strip() for cell in row):
                         rows.append(row)
                 return rows
             except Exception as e:
                 logger.warning(f"Could not convert DataFrame to list: {e}")
                 return []
-        
-        # Handle case where data is a dict (like {'18': {0: ''}, None: {0: ''}})
         if isinstance(v, dict):
             logger.warning(f"Received dict table data, converting: {v}")
             rows = []
@@ -59,13 +53,9 @@ class TableData(BaseModel):
                     if row_data and any(str(cell).strip() for cell in row_data):
                         rows.append([str(cell) for cell in row_data])
             return rows if rows else []
-        
-        # Handle normal list structure
         if isinstance(v, list):
             return [[str(cell) for cell in row] if isinstance(row, list) else [str(row)] for row in v]
-        
         return []
-       
 
 class ImageData(BaseModel):
     page_number: Optional[int] = Field(None, description="Page number where the image appears")
@@ -93,51 +83,40 @@ class KnowledgeGraph(BaseModel):
 
 class ProcessedDocumentResponse(BaseModel):
     file_path: str
-    doc_metadata: DocumentMetadata  # This matches your endpoint mapping
+    doc_metadata: DocumentMetadata
     full_text: Optional[str] = ""
     text_chunks: Optional[List[TextChunk]] = Field(default_factory=list)
-    semantic_chunks: Optional[List[SemanticChunk]] = Field(default_factory=list)  # Added this
+    semantic_chunks: Optional[List[SemanticChunk]] = Field(default_factory=list)
     tables: Optional[List[TableData]] = Field(default_factory=list)
     images: Optional[List[ImageData]] = Field(default_factory=list)
     structure: Optional[DocumentStructure] = None
     analytics: Optional[TextAnalytics] = None
-    knowledge_graph: Optional[KnowledgeGraph] = None  # Added this
-    document_id: Optional[str] = None  # Added this
+    knowledge_graph: Optional[KnowledgeGraph] = None
+    document_id: Optional[str] = None
     
     class Config:
         extra = "allow"
         validate_assignment = True
 
-# Safe construction functions
-def safe_table_data(raw_table: Union[Dict[str, Any], pd.DataFrame, Any]) -> Optional[TableData]:
-    """Safely construct a TableData object from raw input including DataFrames."""
+def safe_table_data(raw_table: Any) -> Optional[TableData]:
     try:
-        # Handle pandas DataFrame directly
-        if hasattr(raw_table, 'to_dict'):  # It's a DataFrame
+        if hasattr(raw_table, 'to_dict'):
             logger.info("Processing DataFrame table")
-            # Check if DataFrame has any meaningful data
             if raw_table.empty:
                 logger.info("Skipping empty DataFrame")
                 return None
-            
-            # Create TableData with DataFrame
             table_data = TableData(
-                page_number=None,  # You might need to extract this from somewhere else
-                data=raw_table  # Let the validator handle the conversion
+                page_number=None,
+                data=raw_table
             )
-            
-            # Only return if table actually has data after conversion
             if table_data.data and any(any(str(cell).strip() for cell in row) for row in table_data.data):
                 return table_data
             else:
                 logger.info("Skipping empty table after conversion")
                 return None
-        
-        # Handle dict input
         elif isinstance(raw_table, dict):
             logger.info("Processing dict table")
             table_data = TableData(**raw_table)
-            
             if table_data.data and any(any(str(cell).strip() for cell in row) for row in table_data.data):
                 return table_data
             else:
@@ -146,15 +125,14 @@ def safe_table_data(raw_table: Union[Dict[str, Any], pd.DataFrame, Any]) -> Opti
         else:
             logger.warning(f"Expected dict or DataFrame for table data, got {type(raw_table)}")
             return None
-            
     except ValidationError as e:
         logger.error(f"Table validation error: {e}")
         return None
     except Exception as e:
         logger.error(f"Unexpected error in table processing: {e}")
         return None
+
 def safe_image_data(raw_image: Dict[str, Any]) -> Optional[ImageData]:
-    """Safely construct an ImageData object from raw input."""
     try:
         return ImageData(**raw_image)
     except ValidationError as e:
@@ -165,42 +143,8 @@ def safe_image_data(raw_image: Dict[str, Any]) -> Optional[ImageData]:
         return None
 
 def build_tables_safe(raw_tables: List[Any]) -> List[TableData]:
-    """Build table list with comprehensive error handling."""
     if not raw_tables:
         return []
-    
-    valid_tables = []
-    for i, raw_table in enumerate(raw_tables):
-        try:
-            table = safe_table_data(raw_table)
-            if table:
-                valid_tables.append(table)
-        except Exception as e:
-            logger.error(f"Error processing table {i}: {e}")
-    
-    return valid_tables
-
-def build_images_safe(raw_images: List[Dict[str, Any]]) -> List[ImageData]:
-    """Build image list with comprehensive error handling."""
-    if not raw_images:
-        return []
-    
-    valid_images = []
-    for i, raw_image in enumerate(raw_images):
-        try:
-            image = safe_image_data(raw_image)
-            if image:
-                valid_images.append(image)
-        except Exception as e:
-            logger.error(f"Error processing image {i}: {e}")
-    
-    return valid_images
-
-def build_tables_safe(raw_tables: List[Any]) -> List[TableData]:
-    """Build table list with comprehensive error handling for DataFrames."""
-    if not raw_tables:
-        return []
-    
     valid_tables = []
     for i, raw_table in enumerate(raw_tables):
         try:
@@ -213,6 +157,18 @@ def build_tables_safe(raw_tables: List[Any]) -> List[TableData]:
                 logger.info(f"Skipped table {i} (empty or invalid)")
         except Exception as e:
             logger.error(f"Error processing table {i}: {e}")
-    
     logger.info(f"Successfully processed {len(valid_tables)} out of {len(raw_tables)} tables")
     return valid_tables
+
+def build_images_safe(raw_images: List[Dict[str, Any]]) -> List[ImageData]:
+    if not raw_images:
+        return []
+    valid_images = []
+    for i, raw_image in enumerate(raw_images):
+        try:
+            image = safe_image_data(raw_image)
+            if image:
+                valid_images.append(image)
+        except Exception as e:
+            logger.error(f"Error processing image {i}: {e}")
+    return valid_images

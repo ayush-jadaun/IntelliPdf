@@ -11,7 +11,7 @@ class Document(Base):
     title = Column(String, index=True)
     file_path = Column(String, nullable=True)
     doc_metadata = Column(JSON, nullable=True)  # Renamed from metadata
-    embedding = Column(Vector(768), nullable=True)
+    embedding = Column(Vector(384), nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
     chunks = relationship("Chunk", back_populates="document")
@@ -23,7 +23,7 @@ class Chunk(Base):
     text = Column(String)
     page_number = Column(Integer, nullable=True)
     chunk_type = Column(String, nullable=True)
-    embedding = Column(Vector(768), nullable=True)
+    embedding = Column(Vector(384), nullable=True)
     doc_metadata = Column(JSON, nullable=True)  # Renamed from metadata
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     document = relationship("Document", back_populates="chunks")

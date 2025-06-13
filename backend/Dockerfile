@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y \
     libsm6 \
     libxext6 \
     libxrender1 \
+    tesseract-ocr \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
@@ -34,7 +35,7 @@ COPY ./alembic ./alembic
 COPY alembic.ini .
 
 # Run migrations (this will run when container starts)
-RUN alembic upgrade head
+# RUN alembic upgrade head
 
 EXPOSE 8000
 

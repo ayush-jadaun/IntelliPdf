@@ -137,7 +137,7 @@ class DocumentProcessingPipeline:
                     title=doc_metadata_dict.get("title") or os.path.basename(file_path),
                     embedding=avg_embedding,
                     file_path=file_path,
-                    metadata=doc_metadata_dict,
+                    doc_metadata=doc_metadata_dict,
                 )
                 logger.info(f"Added document to DB with ID: {doc_id}")
 
@@ -152,7 +152,7 @@ class DocumentProcessingPipeline:
                             "embedding": chunk.get("embedding"),
                             "page_number": chunk_metadata.get("original_page", 1),
                             "chunk_type": chunk_metadata.get("chunk_type", "semantic"),
-                            "metadata": chunk_metadata,
+                            "doc_metadata": chunk_metadata,
                         })
                     except Exception as e:
                         logger.warning(f"Error preparing chunk {i}: {e}")
@@ -178,10 +178,12 @@ class DocumentProcessingPipeline:
             # 6. Knowledge Graph Construction (with safe handling)
             logger.info("Step 6: Knowledge graph construction")
             try:
+                # Always serialize metadata to dict before passing to KG builder
+                doc_metadata_dict = self._serialize_metadata(processed_doc.doc_metadata)
                 knowledge_graph = build_knowledge_graph(
                     entities=entities,
                     keywords=keywords,
-                    doc_metadata=processed_doc.doc_metadata,
+                    doc_metadata=doc_metadata_dict,
                     doc_id=doc_id,
                 )
             except Exception as e:
@@ -192,19 +194,25 @@ class DocumentProcessingPipeline:
             logger.info("Step 7: Preparing result")
 
             # Safe table serialization
+            def ensure_str_keys(d):
+                if not isinstance(d, dict): return d
+                return {str(k): v for k, v in d.items()}
+
             serialized_tables = []
             for table in processed_doc.tables:
                 try:
                     if hasattr(table, "page_number") and hasattr(table, "data"):
-                        # matches TableData
                         serialized_tables.append({
                             "page_number": table.page_number,
                             "data": table.data
                         })
                     elif hasattr(table, "to_dict"):
-                        serialized_tables.append(table.to_dict())
+                        tdict = table.to_dict()
+                        serialized_tables.append(ensure_str_keys(tdict))
                     elif hasattr(table, "to_json"):
                         serialized_tables.append(table.to_json())
+                    elif isinstance(table, dict):
+                        serialized_tables.append(ensure_str_keys(table))
                     else:
                         serialized_tables.append(str(table))
                 except Exception as e:
@@ -223,7 +231,6 @@ class DocumentProcessingPipeline:
                             "height": img.height,
                         })
                     elif isinstance(img, dict):
-                        # already dict-like, check keys
                         img_obj = {
                             "page_number": img.get("page_number"),
                             "ext": img.get("ext"),
@@ -249,7 +256,6 @@ class DocumentProcessingPipeline:
                         "pages": s.pages,
                     }
                 elif isinstance(s, dict):
-                    # Already dict
                     structure = s
                 else:
                     structure = {}
@@ -323,13 +329,13 @@ class DocumentProcessingPipeline:
         """Convert metadata dataclass to dict safely."""
         try:
             if hasattr(metadata, "__dict__"):
-                return {k: v for k, v in metadata.__dict__.items()}
-            elif hasattr(metadata, "_asdict"):  # namedtuple
-                return metadata._asdict()
+                return {str(k): v for k, v in metadata.__dict__.items()}
+            elif hasattr(metadata, "_asdict"):
+                return {str(k): v for k, v in metadata._asdict().items()}
             elif isinstance(metadata, dict):
-                return metadata
+                return {str(k): v for k, v in metadata.items()}
             else:
-                return vars(metadata)
+                return {str(k): v for k, v in vars(metadata).items()}
         except Exception as e:
             logger.warning(f"Error serializing metadata: {e}")
             return {}
