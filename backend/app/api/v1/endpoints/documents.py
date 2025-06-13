@@ -1,7 +1,10 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from app.core.ai.document_processor import DocumentProcessingPipeline
 from app.schemas.document import ProcessedDocumentResponse, DocumentMetadata, DocumentStructure, TextAnalytics, KnowledgeGraph
 from app.schemas.document import build_tables_safe, build_images_safe
+from app.core.database.vector_store import add_document_embedding, add_chunk_embedding
+from app.core.database.session import get_db
+from sqlalchemy.orm import Session
 import os
 import tempfile
 import asyncio
@@ -55,6 +58,10 @@ def create_safe_document_response(result: dict, file_path: str, filename: str) -
         
         images = build_images_safe(result.get("images", []))
         
+        # Ensure document_id is always a string
+        doc_id = result.get("document_id")
+        document_id_str = str(doc_id) if doc_id is not None else None
+
         # Create the response
         response = ProcessedDocumentResponse(
             file_path=file_path,
@@ -67,7 +74,7 @@ def create_safe_document_response(result: dict, file_path: str, filename: str) -
             structure=structure,
             analytics=analytics,
             knowledge_graph=knowledge_graph,
-            document_id=result.get("document_id"),
+            document_id=document_id_str,
         )
         
         return response
@@ -84,14 +91,14 @@ def create_safe_document_response(result: dict, file_path: str, filename: str) -
         )
 
 @router.post("/process/", response_model=ProcessedDocumentResponse)
-async def process_document(file: UploadFile = File(...)):
+async def process_document(file: UploadFile = File(...), db: Session = Depends(get_db)):
     suffix = os.path.splitext(file.filename)[-1]
     if suffix.lower() != ".pdf":
         raise HTTPException(status_code=400, detail="Only PDF files are supported.")
     
     tmp_path = None
     try:
-        # Create temporary file
+        # Save uploaded file to temp
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
             content = await file.read()
             tmp.write(content)
@@ -99,28 +106,50 @@ async def process_document(file: UploadFile = File(...)):
         
         logger.info(f"Processing file: {file.filename} (temp: {tmp_path})")
 
-        # Create pipeline
+        # Process document
         pipeline = DocumentProcessingPipeline()
-        
-        # Run sync pipeline code in threadpool to avoid blocking event loop
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(None, pipeline.process, tmp_path)
-        
         logger.info("Pipeline processing completed successfully")
-        logger.info(f"Pipeline result keys: {list(result.keys()) if result else 'None'}")
-        
-        # Create response using safe mapping function
+
+        # --- SAVE TO DATABASE ---
+        # Save document first, get its id
+        doc_metadata = result.get("metadata", {})
+        doc_embedding = result.get("embedding")  # Or however your pipeline outputs document-level embedding
+        document_id = add_document_embedding(
+            db,
+            title=file.filename,
+            embedding=doc_embedding,
+            file_path=tmp_path,
+            doc_metadata=doc_metadata
+        )
+
+        # Save chunks
+        for chunk_data in result.get("semantic_chunks", []):
+            add_chunk_embedding(
+                db,
+                document_id=document_id,
+                text=chunk_data.get("text"),
+                embedding=chunk_data.get("embedding"),
+                page_number=chunk_data.get("page_number"),
+                chunk_type=chunk_data.get("chunk_type"),
+                doc_metadata=chunk_data.get("metadata")
+            )
+
+        # Prepare API response
+        # Patch result["document_id"] so response uses correct value as string
+        result["document_id"] = str(document_id) if document_id is not None else None
         response = create_safe_document_response(result, tmp_path, file.filename)
-        
+        # No need for: response.document_id = str(document_id) -- it's handled above
+
         logger.info("Response object created successfully")
         return response
-            
+
     except Exception as e:
         logger.error(f"Document processing failed: {str(e)}")
         logger.error(f"Full traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
     finally:
-        # Clean up temp file
         if tmp_path and os.path.exists(tmp_path):
             try:
                 os.remove(tmp_path)
@@ -156,6 +185,7 @@ async def process_document_simple(file: UploadFile = File(...)):
         logger.info("Pipeline processing completed successfully")
         
         # Return detailed result structure for debugging
+        doc_id = result.get("document_id")
         simplified_result = {
             "status": "success",
             "filename": file.filename,
@@ -168,7 +198,7 @@ async def process_document_simple(file: UploadFile = File(...)):
             "semantic_chunks_count": len(result.get("semantic_chunks", [])),
             "tables_count": len(result.get("tables", [])),
             "images_count": len(result.get("images", [])),
-            "document_id": result.get("document_id"),
+            "document_id": str(doc_id) if doc_id is not None else None,
             "has_analytics": "analytics" in result,
             "has_knowledge_graph": "knowledge_graph" in result,
             # Include first 500 chars of text for verification

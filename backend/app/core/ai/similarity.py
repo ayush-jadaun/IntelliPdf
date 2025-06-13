@@ -30,7 +30,7 @@ def cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
 def most_similar_chunks(
     query_embedding: List[float],
     chunk_list: List[Dict[str, Any]],
-    top_k: int = 5
+    top_k: int = 20
 ) -> List[Tuple[Dict[str, Any], float]]:
     """
     Return top_k most similar chunks to the query_embedding using cosine similarity.

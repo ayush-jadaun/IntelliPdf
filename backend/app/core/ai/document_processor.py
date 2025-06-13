@@ -306,7 +306,7 @@ class DocumentProcessingPipeline:
                 "analytics": analytics_obj,
                 "semantic_chunks": semantic_chunks_with_embeddings,
                 "knowledge_graph": knowledge_graph,
-                "document_id": doc_id,
+                "document_id": str(doc_id) if doc_id is not None else None,
             }
 
             logger.info(
