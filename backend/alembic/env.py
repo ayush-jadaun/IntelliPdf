@@ -1,36 +1,56 @@
-from logging.config import fileConfig
-from sqlalchemy import engine_from_config, pool
-from alembic import context
 import os
 import sys
+from logging.config import fileConfig
 
-# If your models live in backend/app/core/database/models.py, adjust this path as needed:
+from sqlalchemy import engine_from_config
+from sqlalchemy import pool
+
+from alembic import context
+
+# Ensure the app directory is in sys.path; adjust as needed for your structure
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'app', 'core', 'database')))
-from models import Base
 
+from models import Base  # Adjust if your Base is elsewhere
+
+# this is the Alembic Config object, which provides access to the values within the .ini file in use.
 config = context.config
 
+# Interpret the config file for Python logging.
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Set this to your SQLAlchemy Base metadata for 'alembic revision --autogenerate' to work!
+# Set the SQLAlchemy metadata object for 'alembic revision --autogenerate'
 target_metadata = Base.metadata
 
-def get_url():
-    return "postgresql+psycopg2://intellipdf:securepass@postgres:5432/intellipdf_db"
-
 def run_migrations_offline():
-    url = get_url()
-    context.configure(url=url, target_metadata=target_metadata, literal_binds=True)
+    """Run migrations in 'offline' mode."""
+    url = config.get_main_option("sqlalchemy.url")
+    context.configure(
+        url=url,
+        target_metadata=target_metadata,
+        literal_binds=True,
+        compare_type=True,
+        dialect_opts={"paramstyle": "named"},
+    )
+
     with context.begin_transaction():
         context.run_migrations()
 
 def run_migrations_online():
-    configuration = config.get_section(config.config_ini_section)
-    configuration["sqlalchemy.url"] = get_url()
-    connectable = engine_from_config(configuration, prefix="sqlalchemy.", poolclass=pool.NullPool)
+    """Run migrations in 'online' mode."""
+    connectable = engine_from_config(
+        config.get_section(config.config_ini_section),
+        prefix='sqlalchemy.',
+        poolclass=pool.NullPool,
+    )
+
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            compare_type=True,
+        )
+
         with context.begin_transaction():
             context.run_migrations()
 

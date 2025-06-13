@@ -45,8 +45,8 @@ services:
 
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: deployment/docker/backend.Dockerfile
       # Enable BuildKit for better caching
       cache_from:
         - intellipdf-backend:latest
@@ -63,10 +63,6 @@ services:
     networks:
       - intellipdf-net
     restart: unless-stopped
-    # For development: mount code as volume to avoid rebuilds
-    # volumes:
-    #   - ./backend/app:/app/app:ro
-
 networks:
   intellipdf-net:
     driver: bridge

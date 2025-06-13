@@ -16,15 +16,16 @@ branch_labels = None
 depends_on = None
 
 def upgrade():
+    op.execute("CREATE EXTENSION IF NOT EXISTS vector;")
     op.create_table(
         'documents',
         sa.Column('id', sa.Integer, primary_key=True, index=True),
         sa.Column('title', sa.String, index=True),
         sa.Column('file_path', sa.String, nullable=True),
         sa.Column('doc_metadata', sa.JSON, nullable=True),
-        pgvector.sqlalchemy.Vector(384, name='embedding', nullable=True),
-        sa.Column('created_at', sa.DateTime, nullable=False),
-        sa.Column('updated_at', sa.DateTime, nullable=False),
+        sa.Column('embedding', pgvector.sqlalchemy.Vector(384), nullable=True),
+        sa.Column('created_at', sa.DateTime, nullable=False, default=sa.text('CURRENT_TIMESTAMP')),
+        sa.Column('updated_at', sa.DateTime, nullable=False, default=sa.text('CURRENT_TIMESTAMP')),
     )
     op.create_table(
         'chunks',
@@ -33,11 +34,10 @@ def upgrade():
         sa.Column('text', sa.String),
         sa.Column('page_number', sa.Integer, nullable=True),
         sa.Column('chunk_type', sa.String, nullable=True),
-        pgvector.sqlalchemy.Vector(384, name='embedding', nullable=True),
+        sa.Column('embedding', pgvector.sqlalchemy.Vector(384), nullable=True),
         sa.Column('doc_metadata', sa.JSON, nullable=True),
-        sa.Column('created_at', sa.DateTime, nullable=False),
+        sa.Column('created_at', sa.DateTime, nullable=False, default=sa.text('CURRENT_TIMESTAMP')),
     )
-    op.execute("CREATE EXTENSION IF NOT EXISTS vector;")
 
 def downgrade():
     op.drop_table('chunks')
