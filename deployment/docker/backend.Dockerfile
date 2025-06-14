@@ -18,7 +18,7 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean
 
 # Copy requirements first
-COPY ../../backend/requirements.txt .
+COPY backend/requirements.txt .
 
 # Install Python dependencies with cache mount
 RUN --mount=type=cache,target=/root/.cache/pip \
@@ -29,13 +29,12 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 RUN --mount=type=cache,target=/root/.cache/pip \
     python -m spacy download en_core_web_sm
 
-
-COPY backend/requirements.txt .
 COPY backend/app ./app
 COPY backend/alembic ./alembic
 COPY backend/alembic/alembic.ini .
-
+COPY backend/start.sh .
+RUN chmod +x start.sh
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["./start.sh"]

@@ -10,7 +10,7 @@ import sqlalchemy as sa
 import pgvector.sqlalchemy
 
 # revision identifiers, used by Alembic.
-revision = '20250613_create_documents_and_chunks'
+revision = '20250613_create_documents'
 down_revision = None
 branch_labels = None
 depends_on = None
