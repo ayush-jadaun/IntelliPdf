@@ -10,6 +10,11 @@ import tempfile
 import asyncio
 import logging
 import traceback
+from app.core.database.models import Document
+
+# MinIO imports
+from minio import Minio
+from app.core.database.storage_clients import get_minio_client
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -90,6 +95,7 @@ def create_safe_document_response(result: dict, file_path: str, filename: str) -
             analytics=TextAnalytics()
         )
 
+
 @router.post("/process/", response_model=ProcessedDocumentResponse)
 async def process_document(file: UploadFile = File(...), db: Session = Depends(get_db)):
     suffix = os.path.splitext(file.filename)[-1]
@@ -124,6 +130,25 @@ async def process_document(file: UploadFile = File(...), db: Session = Depends(g
             doc_metadata=doc_metadata
         )
 
+        # Save PDF to MinIO using document_id as the key
+        minio_client = get_minio_client()
+        minio_bucket = os.environ["MINIO_BUCKET"]
+        minio_key = f"documents/{document_id}.pdf"
+        with open(tmp_path, "rb") as pdf_file:
+            minio_client.put_object(
+                minio_bucket,
+                minio_key,
+                pdf_file,
+                length=os.path.getsize(tmp_path),
+                content_type="application/pdf"
+            )
+
+        # Update Postgres with minio_key
+        doc_obj = db.query(Document).filter(Document.id == document_id).first()
+        if doc_obj:
+            doc_obj.minio_key = minio_key
+            db.commit()
+
         # Save chunks
         for chunk_data in result.get("semantic_chunks", []):
             add_chunk_embedding(
@@ -137,11 +162,8 @@ async def process_document(file: UploadFile = File(...), db: Session = Depends(g
             )
 
         # Prepare API response
-        # Patch result["document_id"] so response uses correct value as string
         result["document_id"] = str(document_id) if document_id is not None else None
         response = create_safe_document_response(result, tmp_path, file.filename)
-        # No need for: response.document_id = str(document_id) -- it's handled above
-
         logger.info("Response object created successfully")
         return response
 

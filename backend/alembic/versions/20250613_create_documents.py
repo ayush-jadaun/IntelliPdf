@@ -1,6 +1,6 @@
 """create documents and chunks tables
 
-Revision ID: 20250613_create_documents_and_chunks
+Revision ID: 20250613061700
 Revises: 
 Create Date: 2025-06-13 06:17:00.000000
 
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 import pgvector.sqlalchemy
 
 # revision identifiers, used by Alembic.
-revision = '20250613_create_documents'
+revision = '20250613061700'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -24,8 +24,8 @@ def upgrade():
         sa.Column('file_path', sa.String, nullable=True),
         sa.Column('doc_metadata', sa.JSON, nullable=True),
         sa.Column('embedding', pgvector.sqlalchemy.Vector(384), nullable=True),
-        sa.Column('created_at', sa.DateTime, nullable=False, default=sa.text('CURRENT_TIMESTAMP')),
-        sa.Column('updated_at', sa.DateTime, nullable=False, default=sa.text('CURRENT_TIMESTAMP')),
+        sa.Column('created_at', sa.DateTime, nullable=False, server_default=sa.text('CURRENT_TIMESTAMP')),
+        sa.Column('updated_at', sa.DateTime, nullable=False, server_default=sa.text('CURRENT_TIMESTAMP')),
     )
     op.create_table(
         'chunks',
@@ -36,7 +36,7 @@ def upgrade():
         sa.Column('chunk_type', sa.String, nullable=True),
         sa.Column('embedding', pgvector.sqlalchemy.Vector(384), nullable=True),
         sa.Column('doc_metadata', sa.JSON, nullable=True),
-        sa.Column('created_at', sa.DateTime, nullable=False, default=sa.text('CURRENT_TIMESTAMP')),
+        sa.Column('created_at', sa.DateTime, nullable=False, server_default=sa.text('CURRENT_TIMESTAMP')),
     )
 
 def downgrade():

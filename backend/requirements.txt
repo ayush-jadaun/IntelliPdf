@@ -49,4 +49,5 @@ setuptools
 build
 pgvector
 neo4j
+minio
 aiohttp
