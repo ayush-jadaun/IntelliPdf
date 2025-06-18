@@ -30,7 +30,6 @@ def fetch_knowledge_graph_from_neo4j(doc_id: Optional[str] = None) -> KnowledgeG
             """
             results = session.run(cypher)
 
-        # Collect nodes and edges
         nodes_dict = {}
         edges: List[KnowledgeGraphEdge] = []
         for record in results:
@@ -38,18 +37,36 @@ def fetch_knowledge_graph_from_neo4j(doc_id: Optional[str] = None) -> KnowledgeG
             rel = record[1]
             n2 = record[2]
             for n in [n1, n2]:
-                if n.id not in nodes_dict:
-                    # You may want to extract a label from n.labels or n.get("label", ...).
-                    nodes_dict[n.id] = KnowledgeGraphNode(
-                        id=n.id,
-                        label=next(iter(n.labels), "Node"),
-                        type=n.get("type", "Unknown"),
+                node_id = str(n.get("id") or n.id)
+                node_type = str(n.get("type", "Unknown")).lower()
+                # Detect if this is a document node (by type or label)
+                is_document = (node_type == "document") or ("Document" in getattr(n, "labels", []))
+                if is_document:
+                    # Use the 'title' property if present, fallback to label property, then node_id
+                    label = n.get("title") or n.get("label") or node_id
+                else:
+                    label = n.get("label")
+                    if label is None:
+                        if hasattr(n, "labels"):
+                            labels_set = n.labels
+                            if labels_set:
+                                label = str(next(iter(labels_set)))
+                            else:
+                                label = "Node"
+                        else:
+                            label = "Node"
+                label = str(label)
+                if node_id not in nodes_dict:
+                    nodes_dict[node_id] = KnowledgeGraphNode(
+                        id=node_id,
+                        label=label,
+                        type=str(n.get("type", "Unknown")),
                         score=n.get("score")
                     )
             edges.append(KnowledgeGraphEdge(
-                source=n1.id,
-                target=n2.id,
-                type=rel.type,
+                source=str(n1.get("id") or n1.id),
+                target=str(n2.get("id") or n2.id),
+                type=str(rel.type),
                 weight=rel.get("weight")
             ))
         return KnowledgeGraph(

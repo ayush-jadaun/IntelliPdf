@@ -185,6 +185,7 @@ class DocumentProcessingPipeline:
                     keywords=keywords,
                     doc_metadata=doc_metadata_dict,
                     doc_id=doc_id,
+                    persist_to_neo4j=True
                 )
             except Exception as e:
                 logger.warning(f"Knowledge graph construction failed: {e}")

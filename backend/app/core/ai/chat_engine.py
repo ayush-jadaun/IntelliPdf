@@ -4,12 +4,12 @@ import os
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 genai.configure(api_key=GEMINI_API_KEY)
 
-def gemini_chat(messages, model="gemini-pro"):
+def gemini_chat(messages, model="gemini-1.5-flash-latest"):
     model = genai.GenerativeModel(model)
     response = model.generate_content(messages)
     return response.text.strip()
 
-def gemini_summarize(text, model="gemini-pro"):
+def gemini_summarize(text, model="gemini-1.5-flash-latest"):
     model = genai.GenerativeModel(model)
     response = model.generate_content(f"Summarize this document:\n{text}")
     return response.text.strip()
